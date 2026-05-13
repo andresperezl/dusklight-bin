@@ -44,7 +44,12 @@ jobs:
 
           if runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
             bash -c 'cd "${GITHUB_WORKSPACE}" && git diff --quiet -- PKGBUILD .SRCINFO'; then
-            printf 'changed=false\n' >>"${GITHUB_OUTPUT}"
+            pkgver=$(runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
+              bash -c 'cd "${GITHUB_WORKSPACE}" && source PKGBUILD && printf "%s" "${pkgver}"')
+            {
+              printf 'changed=false\n'
+              printf 'pkgver=%s\n' "${pkgver}"
+            } >>"${GITHUB_OUTPUT}"
           else
             pkgver=$(runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
               bash -c 'cd "${GITHUB_WORKSPACE}" && source PKGBUILD && printf "%s" "${pkgver}"')
@@ -62,13 +67,22 @@ jobs:
           runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" PKGVER="${PKGVER}" \
             bash -c 'cd "${GITHUB_WORKSPACE}" && git add PKGBUILD .SRCINFO && git -c user.name="dusklight-aur-bot" -c user.email="dusklight-aur-bot@users.noreply.github.com" commit -m "Update dusklight-bin to ${PKGVER}"'
 
+      - name: Create version tag
+        if: steps.update.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        env:
+          PKGVER: ${{ steps.update.outputs.pkgver }}
+        run: |
+          runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" PKGVER="${PKGVER}" \
+            bash -c 'cd "${GITHUB_WORKSPACE}" && tag="v${PKGVER}" && if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then printf "Tag %s already exists\n" "${tag}"; else git -c user.name="dusklight-aur-bot" -c user.email="dusklight-aur-bot@users.noreply.github.com" tag -a "${tag}" -m "dusklight-bin ${PKGVER}"; fi'
+
       - name: Push package repo
-        if: steps.update.outputs.changed == 'true'
+        if: steps.update.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
         env:
           REF_NAME: ${{ github.ref_name }}
+          PKGVER: ${{ steps.update.outputs.pkgver }}
         run: |
-          runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" REF_NAME="${REF_NAME}" \
-            bash -c 'cd "${GITHUB_WORKSPACE}" && git push origin HEAD:${REF_NAME}'
+          runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" REF_NAME="${REF_NAME}" PKGVER="${PKGVER}" \
+            bash -c 'cd "${GITHUB_WORKSPACE}" && tag="v${PKGVER}" && git push origin HEAD:${REF_NAME} && git push origin "refs/tags/${tag}"'
 
       - name: Configure AUR SSH
         if: steps.update.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
