@@ -23,7 +23,7 @@ jobs:
         run: pacman -Syu --noconfirm git openssh curl python pacman-contrib
 
       - name: Check out package repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
