@@ -100,6 +100,22 @@ jobs:
         if: steps.update.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
         env:
           GIT_SSH_COMMAND: ssh -i /home/builder/.ssh/aur -o IdentitiesOnly=yes
+          PKGVER: ${{ steps.update.outputs.pkgver }}
         run: |
-          runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" GIT_SSH_COMMAND="${GIT_SSH_COMMAND}" \
-            bash -c 'cd "${GITHUB_WORKSPACE}" && git remote add aur ssh://aur@aur.archlinux.org/dusklight-bin.git && git push aur HEAD:master'
+          runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" GIT_SSH_COMMAND="${GIT_SSH_COMMAND}" PKGVER="${PKGVER}" \
+            bash -c '
+              set -euo pipefail
+              aur_dir=$(mktemp -d)
+              git clone ssh://aur@aur.archlinux.org/dusklight-bin.git "${aur_dir}"
+              cp "${GITHUB_WORKSPACE}/PKGBUILD" "${GITHUB_WORKSPACE}/.SRCINFO" "${aur_dir}/"
+              cd "${aur_dir}"
+              git add PKGBUILD .SRCINFO
+              if git diff --cached --quiet; then
+                printf "AUR package is already up to date\n"
+              else
+                git -c user.name="dusklight-aur-bot" \
+                  -c user.email="dusklight-aur-bot@users.noreply.github.com" \
+                  commit -m "Update dusklight-bin to ${PKGVER}"
+                git push origin master
+              fi
+            '
