@@ -1,0 +1,8 @@
+*.AppImage
+*.pkg.tar.*
+*.png
+LICENSE.md
+dusklight.desktop
+pkg/
+src/
+*.log

@@ -1,0 +1,91 @@
+name: Update AUR Package
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 */6 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-aur-package
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+
+    steps:
+      - name: Install tooling
+        run: pacman -Syu --noconfirm git openssh curl python pacman-contrib
+
+      - name: Check out package repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare build user
+        run: |
+          useradd -m builder
+          chown -R builder:builder "${GITHUB_WORKSPACE}"
+
+      - name: Check for upstream release
+        id: update
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          runuser -u builder -- env -u GITHUB_OUTPUT \
+            GITHUB_TOKEN="${GITHUB_TOKEN}" \
+            GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
+            bash -c 'cd "${GITHUB_WORKSPACE}" && bash scripts/update-package.sh'
+
+          if runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
+            bash -c 'cd "${GITHUB_WORKSPACE}" && git diff --quiet -- PKGBUILD .SRCINFO'; then
+            printf 'changed=false\n' >>"${GITHUB_OUTPUT}"
+          else
+            pkgver=$(runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
+              bash -c 'cd "${GITHUB_WORKSPACE}" && source PKGBUILD && printf "%s" "${pkgver}"')
+            {
+              printf 'changed=true\n'
+              printf 'pkgver=%s\n' "${pkgver}"
+            } >>"${GITHUB_OUTPUT}"
+          fi
+
+      - name: Commit package update
+        if: steps.update.outputs.changed == 'true'
+        env:
+          PKGVER: ${{ steps.update.outputs.pkgver }}
+        run: |
+          runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" PKGVER="${PKGVER}" \
+            bash -c 'cd "${GITHUB_WORKSPACE}" && git add PKGBUILD .SRCINFO && git -c user.name="dusklight-aur-bot" -c user.email="dusklight-aur-bot@users.noreply.github.com" commit -m "Update dusklight-bin to ${PKGVER}"'
+
+      - name: Push package repo
+        if: steps.update.outputs.changed == 'true'
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" REF_NAME="${REF_NAME}" \
+            bash -c 'cd "${GITHUB_WORKSPACE}" && git push origin HEAD:${REF_NAME}'
+
+      - name: Configure AUR SSH
+        if: steps.update.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          test -n "${AUR_SSH_PRIVATE_KEY}"
+          install -dm700 -o builder -g builder /home/builder/.ssh
+          printf '%s\n' "${AUR_SSH_PRIVATE_KEY}" > /home/builder/.ssh/aur
+          chmod 600 /home/builder/.ssh/aur
+          ssh-keyscan -H aur.archlinux.org > /home/builder/.ssh/known_hosts
+          chown builder:builder /home/builder/.ssh/aur /home/builder/.ssh/known_hosts
+
+      - name: Push to AUR
+        if: steps.update.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        env:
+          GIT_SSH_COMMAND: ssh -i /home/builder/.ssh/aur -o IdentitiesOnly=yes
+        run: |
+          runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" GIT_SSH_COMMAND="${GIT_SSH_COMMAND}" \
+            bash -c 'cd "${GITHUB_WORKSPACE}" && git remote add aur ssh://aur@aur.archlinux.org/dusklight-bin.git && git push aur HEAD:master'
