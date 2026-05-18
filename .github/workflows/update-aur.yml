@@ -44,45 +44,48 @@ jobs:
 
           if runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
             bash -c 'cd "${GITHUB_WORKSPACE}" && git diff --quiet -- PKGBUILD .SRCINFO'; then
-            pkgver=$(runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
-              bash -c 'cd "${GITHUB_WORKSPACE}" && source PKGBUILD && printf "%s" "${pkgver}"')
-            {
-              printf 'changed=false\n'
-              printf 'pkgver=%s\n' "${pkgver}"
-            } >>"${GITHUB_OUTPUT}"
+            changed=false
           else
-            pkgver=$(runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
-              bash -c 'cd "${GITHUB_WORKSPACE}" && source PKGBUILD && printf "%s" "${pkgver}"')
-            {
-              printf 'changed=true\n'
-              printf 'pkgver=%s\n' "${pkgver}"
-            } >>"${GITHUB_OUTPUT}"
+            changed=true
           fi
+
+          pkgver=$(runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
+            bash -c 'cd "${GITHUB_WORKSPACE}" && source PKGBUILD && printf "%s" "${pkgver}"')
+          pkgrel=$(runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
+            bash -c 'cd "${GITHUB_WORKSPACE}" && source PKGBUILD && printf "%s" "${pkgrel}"')
+          package_version="${pkgver}-${pkgrel}"
+
+          {
+            printf 'changed=%s\n' "${changed}"
+            printf 'pkgver=%s\n' "${pkgver}"
+            printf 'pkgrel=%s\n' "${pkgrel}"
+            printf 'package_version=%s\n' "${package_version}"
+          } >>"${GITHUB_OUTPUT}"
 
       - name: Commit package update
         if: steps.update.outputs.changed == 'true'
         env:
-          PKGVER: ${{ steps.update.outputs.pkgver }}
+          PACKAGE_VERSION: ${{ steps.update.outputs.package_version }}
         run: |
-          runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" PKGVER="${PKGVER}" \
-            bash -c 'cd "${GITHUB_WORKSPACE}" && git add PKGBUILD .SRCINFO && git -c user.name="dusklight-aur-bot" -c user.email="dusklight-aur-bot@users.noreply.github.com" commit -m "Update dusklight-bin to ${PKGVER}"'
+          runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" PACKAGE_VERSION="${PACKAGE_VERSION}" \
+            bash -c 'cd "${GITHUB_WORKSPACE}" && git add PKGBUILD .SRCINFO && git -c user.name="dusklight-aur-bot" -c user.email="dusklight-aur-bot@users.noreply.github.com" commit -m "Update dusklight-bin to ${PACKAGE_VERSION}"'
 
       - name: Create version tag
         if: steps.update.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
         env:
-          PKGVER: ${{ steps.update.outputs.pkgver }}
+          PACKAGE_VERSION: ${{ steps.update.outputs.package_version }}
         run: |
-          runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" PKGVER="${PKGVER}" \
-            bash -c 'cd "${GITHUB_WORKSPACE}" && tag="v${PKGVER}" && if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then printf "Tag %s already exists\n" "${tag}"; else git -c user.name="dusklight-aur-bot" -c user.email="dusklight-aur-bot@users.noreply.github.com" tag -a "${tag}" -m "dusklight-bin ${PKGVER}"; fi'
+          runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" PACKAGE_VERSION="${PACKAGE_VERSION}" \
+            bash -c 'cd "${GITHUB_WORKSPACE}" && tag="v${PACKAGE_VERSION}" && if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then printf "Tag %s already exists\n" "${tag}"; else git -c user.name="dusklight-aur-bot" -c user.email="dusklight-aur-bot@users.noreply.github.com" tag -a "${tag}" -m "dusklight-bin ${PACKAGE_VERSION}"; fi'
 
       - name: Push package repo
         if: steps.update.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
         env:
           REF_NAME: ${{ github.ref_name }}
-          PKGVER: ${{ steps.update.outputs.pkgver }}
+          PACKAGE_VERSION: ${{ steps.update.outputs.package_version }}
         run: |
-          runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" REF_NAME="${REF_NAME}" PKGVER="${PKGVER}" \
-            bash -c 'cd "${GITHUB_WORKSPACE}" && tag="v${PKGVER}" && git push origin HEAD:${REF_NAME} && git push origin "refs/tags/${tag}"'
+          runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" REF_NAME="${REF_NAME}" PACKAGE_VERSION="${PACKAGE_VERSION}" \
+            bash -c 'cd "${GITHUB_WORKSPACE}" && tag="v${PACKAGE_VERSION}" && git push origin HEAD:${REF_NAME} && git push origin "refs/tags/${tag}"'
 
       - name: Configure AUR SSH
         if: steps.update.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
@@ -100,9 +103,9 @@ jobs:
         if: steps.update.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
         env:
           GIT_SSH_COMMAND: ssh -i /home/builder/.ssh/aur -o IdentitiesOnly=yes
-          PKGVER: ${{ steps.update.outputs.pkgver }}
+          PACKAGE_VERSION: ${{ steps.update.outputs.package_version }}
         run: |
-          runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" GIT_SSH_COMMAND="${GIT_SSH_COMMAND}" PKGVER="${PKGVER}" \
+          runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" GIT_SSH_COMMAND="${GIT_SSH_COMMAND}" PACKAGE_VERSION="${PACKAGE_VERSION}" \
             bash -c '
               set -euo pipefail
               aur_dir=$(mktemp -d)
@@ -115,7 +118,7 @@ jobs:
               else
                 git -c user.name="dusklight-aur-bot" \
                   -c user.email="dusklight-aur-bot@users.noreply.github.com" \
-                  commit -m "Update dusklight-bin to ${PKGVER}"
+                  commit -m "Update dusklight-bin to ${PACKAGE_VERSION}"
                 git push origin master
               fi
             '

@@ -36,7 +36,7 @@ The GitHub Actions workflow in `.github/workflows/update-aur.yml` checks the lat
 - regenerates `.SRCINFO`
 - verifies sources with `makepkg --verifysource`
 - commits and pushes the package repo
-- creates and pushes a matching `v<version>` Git tag, such as `v1.1.1`
+- creates and pushes a matching `v<pkgver>-<pkgrel>` Git tag, such as `v1.1.1-2`
 - syncs `PKGBUILD` and `.SRCINFO` to AUR
 
 Repository requirements:
