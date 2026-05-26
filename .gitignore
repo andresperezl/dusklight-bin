@@ -2,7 +2,7 @@
 *.pkg.tar.*
 *.png
 LICENSE.md
-dusklight.desktop
+*.desktop
 pkg/
 src/
 *.log

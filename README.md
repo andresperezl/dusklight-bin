@@ -13,7 +13,7 @@ The package installs:
 
 - `/opt/dusklight/dusklight.AppImage`
 - `/usr/bin/dusklight`
-- `/usr/share/applications/dusklight.desktop`
+- `/usr/share/applications/dev.twilitrealm.dusk.desktop`
 - hicolor icons under `/usr/share/icons/hicolor`
 
 ## Updating
