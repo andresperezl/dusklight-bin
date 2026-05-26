@@ -23,9 +23,16 @@ jobs:
         run: pacman -Syu --noconfirm git openssh curl python pacman-contrib
 
       - name: Check out package repo
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
+        run: |
+          git init "${GITHUB_WORKSPACE}"
+          cd "${GITHUB_WORKSPACE}"
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --prune --tags origin '+refs/heads/*:refs/remotes/origin/*'
+          if [ "${GITHUB_REF_TYPE}" = branch ]; then
+            git checkout --force -B "${GITHUB_REF_NAME}" "${GITHUB_SHA}"
+          else
+            git checkout --force "${GITHUB_SHA}"
+          fi
 
       - name: Prepare build user
         run: |
@@ -34,11 +41,8 @@ jobs:
 
       - name: Check for upstream release
         id: update
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         run: |
           runuser -u builder -- env -u GITHUB_OUTPUT \
-            GITHUB_TOKEN="${GITHUB_TOKEN}" \
             GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
             bash -c 'cd "${GITHUB_WORKSPACE}" && bash scripts/update-package.sh'
 
@@ -71,7 +75,7 @@ jobs:
             bash -c 'cd "${GITHUB_WORKSPACE}" && git add PKGBUILD .SRCINFO && git -c user.name="dusklight-aur-bot" -c user.email="dusklight-aur-bot@users.noreply.github.com" commit -m "Update dusklight-bin to ${PACKAGE_VERSION}"'
 
       - name: Create version tag
-        if: steps.update.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        if: steps.update.outputs.changed == 'true'
         env:
           PACKAGE_VERSION: ${{ steps.update.outputs.package_version }}
         run: |
@@ -79,13 +83,15 @@ jobs:
             bash -c 'cd "${GITHUB_WORKSPACE}" && tag="v${PACKAGE_VERSION}" && if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then printf "Tag %s already exists\n" "${tag}"; else git -c user.name="dusklight-aur-bot" -c user.email="dusklight-aur-bot@users.noreply.github.com" tag -a "${tag}" -m "dusklight-bin ${PACKAGE_VERSION}"; fi'
 
       - name: Push package repo
-        if: steps.update.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        if: steps.update.outputs.changed == 'true'
         env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ github.token }}
           REF_NAME: ${{ github.ref_name }}
           PACKAGE_VERSION: ${{ steps.update.outputs.package_version }}
         run: |
-          runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" REF_NAME="${REF_NAME}" PACKAGE_VERSION="${PACKAGE_VERSION}" \
-            bash -c 'cd "${GITHUB_WORKSPACE}" && tag="v${PACKAGE_VERSION}" && git push origin HEAD:${REF_NAME} && git push origin "refs/tags/${tag}"'
+          runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" GITHUB_REPOSITORY="${GITHUB_REPOSITORY}" GITHUB_TOKEN="${GITHUB_TOKEN}" REF_NAME="${REF_NAME}" PACKAGE_VERSION="${PACKAGE_VERSION}" \
+            bash -c 'cd "${GITHUB_WORKSPACE}" && tag="v${PACKAGE_VERSION}" && origin="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" && git push "${origin}" HEAD:${REF_NAME} && git push "${origin}" "refs/tags/${tag}"'
 
       - name: Configure AUR SSH
         if: steps.update.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
