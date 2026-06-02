@@ -1,4 +1,4 @@
-# Maintainer: Twilit Realm <https://github.com/TwilitRealm/dusklight>
+# Maintainer: Andres Perez <aur@andresperezl.com>
 pkgname=dusklight-bin
 pkgver=1.3.1
 pkgrel=1
