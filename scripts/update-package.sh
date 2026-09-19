@@ -6,10 +6,11 @@ repo=${DUSKLIGHT_UPSTREAM_REPO:-TwilitRealm/dusklight}
 current_pkgver=$(
   # shellcheck source=/dev/null
   source PKGBUILD
+  # shellcheck disable=SC2154
   printf '%s\n' "${pkgver}"
 )
 
-curl_args=(-fsSL)
+curl_args=(-fsSL --retry 3 --retry-delay 2)
 if [[ -n "${GITHUB_TOKEN:-}" ]]; then
   curl_args+=(
     -H "Authorization: Bearer ${GITHUB_TOKEN}"
@@ -47,6 +48,13 @@ sed -i \
   PKGBUILD
 
 updpkgsums
+aarch64_sum=$(
+  curl "${curl_args[@]}" \
+    "https://github.com/${repo}/releases/download/v${latest_pkgver}/Dusklight-v${latest_pkgver}-linux-arm64.AppImage" |
+    sha256sum |
+    cut -d ' ' -f 1
+)
+sed -i "s/^sha256sums_aarch64=.*/sha256sums_aarch64=('${aarch64_sum}')/" PKGBUILD
 makepkg --printsrcinfo > .SRCINFO
 makepkg --verifysource
 

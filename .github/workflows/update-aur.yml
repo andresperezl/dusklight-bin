@@ -42,9 +42,12 @@ jobs:
 
       - name: Check for upstream release
         id: update
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           runuser -u builder -- env -u GITHUB_OUTPUT \
             GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \
+            GITHUB_TOKEN="${GITHUB_TOKEN}" \
             bash -c 'cd "${GITHUB_WORKSPACE}" && bash scripts/update-package.sh'
 
           if runuser -u builder -- env GITHUB_WORKSPACE="${GITHUB_WORKSPACE}" \

@@ -25,7 +25,7 @@ The package installs:
 5. Run `makepkg --verifysource`.
 6. Commit `PKGBUILD` and `.SRCINFO` to the AUR `dusklight-bin` repository.
 
-Only `x86_64` is listed because upstream currently publishes a Linux x86_64 AppImage.
+The package supports the `x86_64` and `aarch64` AppImages published upstream.
 
 ## Automated Updates
 
